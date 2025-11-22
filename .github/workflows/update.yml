@@ -1,4 +1,4 @@
-name: MAV Update
+name: Train data update
 
 on:
   schedule:
@@ -11,15 +11,45 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - run: pip install pandas requests
-      - run: python scraper.py
-      - run: |
-          git config --global user.name "Bot"
-          git config --global user.email "bot@noreply.github.com"
-          git add data.csv
-          git commit -m "Update" || exit 0
-          git push
+
+      - name: Install dependencies
+        run: pip install pandas requests
+
+      - name: Run scraper script
+        run: python scraper.py
+
+      - name: DEBUG - List files
+        run: |
+          echo "Jelenlegi mappa tartalma:"
+          ls -la
+          echo "-------------------------"
+          if [ -f data.csv ]; then
+            echo "A data.csv LÉTEZIK. Mérete:"
+            du -h data.csv
+          else
+            echo "HIBA: A data.csv NEM JÖTT LÉTRE!"
+          fi
+
+      - name: Commit and Push
+        run: |
+          # Csak akkor próbálkozunk, ha létezik a fájl
+          if [ -f data.csv ]; then
+            git config --global user.name "MAV Bot"
+            git config --global user.email "bot@noreply.github.com"
+            
+            git add data.csv
+            
+            # Commit (ha nincs változás, nem hal meg a folyamat)
+            git commit -m "Auto Update: $(date)" || echo "Nincs új változás a fájlban."
+            
+            git push
+          else
+            echo "Nincs data.csv, a commit lépés kimarad."
+          fi
