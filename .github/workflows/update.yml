@@ -1,0 +1,25 @@
+name: MAV Update
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+
+jobs:
+  scrape-and-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install pandas requests
+      - run: python scraper.py
+      - run: |
+          git config --global user.name "Bot"
+          git config --global user.email "bot@noreply.github.com"
+          git add data.csv
+          git commit -m "Update" || exit 0
+          git push
