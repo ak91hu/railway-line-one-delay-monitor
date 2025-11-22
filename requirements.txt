@@ -1,7 +1,4 @@
 pandas
-requests
 streamlit
 altair
-lxml
-html5lib
-beautifulsoup4
+curl_cffi
