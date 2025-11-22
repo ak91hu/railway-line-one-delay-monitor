@@ -1,4 +1,4 @@
 pandas
+requests
 streamlit
 altair
-curl_cffi
