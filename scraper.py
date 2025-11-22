@@ -1,78 +1,90 @@
-import requests
 import pandas as pd
 import datetime
 import os
-import sys
+import time
+from curl_cffi import requests
 
 DATA_FILE = "data.csv"
 
-RELATIONS = [
-    ("Budapest-Kelenföld", "Tatabánya"),
-    ("Budapest-Kelenföld", "Győr"),
-    ("Budapest-Kelenföld", "Hegyeshalom")
+STATIONS = {
+    "Budapest-Kelenföld": "005501016",
+    "Tatabánya": "005501222",
+    "Győr": "005501289",
+    "Mosonmagyaróvár": "005501305",
+    "Hegyeshalom": "005501313"
+}
+
+LINE_1_TARGETS = [
+    "Győr", "Hegyeshalom", "Rajka", "Oroszlány", 
+    "Wien", "München", "Zürich", "Graz", "Sopron", "Szombathely"
 ]
 
-def get_elvira_data():
+def get_mav_data():
     new_rows = []
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    today_str = datetime.datetime.now().strftime("%y.%m.%d")
     
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Referer": "http://elvira.mav-start.hu/"
-    })
+    print(f"--- INDÍTÁS: {timestamp} ---")
 
-    for start_stat, end_stat in RELATIONS:
+    for station_name, station_id in STATIONS.items():
+        print(f"Lekérdezés: {station_name} ...", end="")
+        
         try:
-            url = f"http://elvira.mav-start.hu/elvira.dll/x/index?i={start_stat}&e={end_stat}&d={today_str}"
-            response = session.get(url, timeout=20)
+            url = "https://jegy.mav.hu/api/v1/komplex-search/station-scheduler"
+            
+            payload = {
+                "stationId": station_id,
+                "date": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+                "direction": "DEPARTURE", 
+                "trainFilter": "ALL_TRAINS"
+            }
+            
+            response = requests.post(
+                url, 
+                json=payload, 
+                impersonate="chrome120", 
+                timeout=20
+            )
             
             if response.status_code == 200:
-                dfs = pd.read_html(response.content, match="Indul", header=0)
-                
-                if len(dfs) > 0:
-                    df = dfs[0]
-                    
-                    required_cols = [c for c in df.columns if "Vonat" in str(c)]
-                    if not required_cols:
-                        continue
+                data = response.json()
+                if "scheduler" in data:
+                    count = 0
+                    for t in data["scheduler"]:
+                        dest = t.get("destination", {}).get("name", "")
                         
-                    for _, row in df.iterrows():
-                        try:
-                            train_raw = str(row.get("Vonat", ""))
-                            if pd.isna(train_raw) or len(train_raw) < 2:
-                                continue
-                                
-                            train_id = train_raw.split("[")[0].strip()
-                            
-                            delay = 0
-                            row_str = str(row.values)
-                            if "+" in row_str:
-                                import re
-                                delays = re.findall(r'\+\s?(\d+)', row_str)
-                                if delays:
-                                    delay = int(max([int(d) for d in delays]))
+                        if any(target in dest for target in LINE_1_TARGETS):
+                            kind = t.get("trainKind", {}).get("sort", "")
+                            number = t.get("trainNumber", "")
+                            full_id = f"{kind} {number}"
+                            delay = t.get("diff", 0)
                             
                             new_rows.append({
                                 "timestamp": timestamp,
-                                "relation": f"{start_stat} -> {end_stat}",
-                                "train_id": train_id,
-                                "destination": end_stat,
+                                "station": station_name,
+                                "train_id": full_id,
+                                "destination": dest,
                                 "delay": delay
                             })
-                        except:
-                            continue
-        except:
-            continue
+                            count += 1
+                    print(f" SIKER! ({count} vonat)")
+                else:
+                    print(" Üres válasz.")
+            else:
+                print(f" Hiba kód: {response.status_code}")
+                
+            time.sleep(2)
+            
+        except Exception as e:
+            print(f" Hiba: {e}")
 
     return pd.DataFrame(new_rows)
 
 if __name__ == "__main__":
-    df_new = get_elvira_data()
+    df_new = get_mav_data()
     
     if not df_new.empty:
         header = not os.path.exists(DATA_FILE)
         df_new.to_csv(DATA_FILE, mode='a', header=header, index=False)
+        print(f"MENTVE: {len(df_new)} sor.")
     else:
-        sys.exit(0)
+        print("Nincs új adat.")
