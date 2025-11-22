@@ -2,9 +2,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 
-st.set_page_config(page_title="MÁV Monitor", layout="wide")
-
-STATION_ORDER = ["Budapest-Kelenföld", "Tatabánya", "Győr", "Mosonmagyaróvár", "Hegyeshalom"]
+st.set_page_config(page_title="MÁV 1-es Vonal", layout="wide")
 DATA_URL = "data.csv"
 
 @st.cache_data(ttl=60)
@@ -18,40 +16,50 @@ def load_data():
 
 df = load_data()
 
-st.title("🚄 MÁV 1-es Vonal Monitor")
+st.title("🚄 MÁV 1-es Vonal (Térkép-alapú adat)")
 
 if df.empty:
-    st.warning("Várakozás az adatokra... (Kérlek futtasd le a GitHub Actiont!)")
-    if st.button("Oldal frissítése"):
-        st.rerun()
+    st.warning("Adatok betöltése folyamatban (vagy még üres az adatbázis).")
     st.stop()
 
-dates = sorted(df['timestamp'].dt.date.unique(), reverse=True)
-selected_date = st.selectbox("Válassz napot:", dates)
+# Legfrissebb állapot
+last_update = df['timestamp'].max()
+current_state = df[df['timestamp'] == last_update]
 
-day_data = df[df['timestamp'].dt.date == selected_date]
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Mérések száma", len(day_data))
-col2.metric("Napi átlagkésés", f"{day_data['delay'].mean():.1f} perc")
-max_delay = day_data['delay'].max()
-col3.metric("Legnagyobb késés", f"{max_delay} perc")
+c1, c2, c3 = st.columns(3)
+c1.metric("Utolsó frissítés", str(last_update)[11:16])
+c2.metric("Aktív vonatok", len(current_state))
+c3.metric("Átlag késés", f"{current_state['delay'].mean():.1f} perc")
 
 st.divider()
 
-st.subheader("Vonat útvonalak")
-trains = day_data['train_id'].unique()
+col_map, col_chart = st.columns([1, 1])
+
+with col_map:
+    st.subheader("Vonatok pozíciója")
+    if 'lat' in current_state.columns:
+        # Csak érvényes koordináták
+        valid_map = current_state.dropna(subset=['lat', 'lon'])
+        st.map(valid_map, latitude='lat', longitude='lon', size=200, color='#ff0000')
+
+with col_chart:
+    st.subheader("Késések listája")
+    st.dataframe(
+        current_state[['train_id', 'relation', 'delay']].sort_values('delay', ascending=False),
+        use_container_width=True,
+        hide_index=True
+    )
+
+st.divider()
+st.subheader("Késés-történet (Ma)")
+trains = df['train_id'].unique()
 sel_train = st.selectbox("Válassz vonatot:", trains)
 
 if sel_train:
-    t_data = day_data[day_data['train_id'] == sel_train].sort_values('timestamp')
-    
-    chart = alt.Chart(t_data).mark_line(point=True, strokeWidth=3).encode(
-        x=alt.X('station', sort=STATION_ORDER, title="Állomás"),
-        y=alt.Y('delay', title='Késés (perc)'),
-        color=alt.value("#ff4b4b"),
-        tooltip=['timestamp', 'station', 'delay', 'destination']
-    ).properties(height=400)
-    
+    t_data = df[df['train_id'] == sel_train].sort_values('timestamp')
+    chart = alt.Chart(t_data).mark_line(point=True).encode(
+        x='timestamp',
+        y='delay',
+        tooltip=['timestamp', 'delay', 'relation']
+    ).interactive()
     st.altair_chart(chart, use_container_width=True)
-    st.dataframe(t_data, use_container_width=True)
