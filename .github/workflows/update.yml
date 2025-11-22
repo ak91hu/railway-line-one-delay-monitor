@@ -1,25 +1,37 @@
-name: Update
+name: Execute scraper
 
 on:
   schedule:
-    - cron: '*/20 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:
-  run-scraper:
+  scrape:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - run: python scraper.py
-      - run: |
-          git config --global user.name "Bot"
-          git config --global user.email "bot@noreply.github.com"
-          git add data.csv
-          git commit -m "Update" || exit 0
-          git push
+          python-version: '3.9'
+          
+      - name: Telepites
+        run: pip install pandas requests
+      
+      - name: Scraper Futtatasa
+        run: python scraper.py
+      
+      - name: Mentes Gitbe
+        run: |
+          if [ -f data.csv ]; then
+            git config --global user.name "MAV Bot"
+            git config --global user.email "bot@noreply.github.com"
+            
+            git add data.csv
+            git commit -m "Update data" || echo "Nincs valtozas"
+            git push
+          else
+            echo "Nem jott letre adatfajl, ezert nem commitolunk."
+          fi
