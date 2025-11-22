@@ -45,7 +45,7 @@ def get_map_data_with_proxy():
     if not proxy_list:
         proxy_list = [None]
 
-    max_tries = 50
+    max_tries = 2000
     for i, proxy in enumerate(proxy_list[:max_tries]):
         proxy_dict = {"http": f"http://{proxy}", "https": f"http://{proxy}"} if proxy else None
         print(f"[{i+1}/{max_tries}] {proxy if proxy else 'Direct'} ... ", end="")
